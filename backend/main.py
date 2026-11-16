@@ -5,7 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 
+from db import models
+from db.database import init_db
 from routers import auth, states, stripe
+
+init_db()
 
 # ASGI serverless runtimes need not run lifespan hooks. Cache is only an
 # optimization local to this instance; no correctness depends on its contents.
