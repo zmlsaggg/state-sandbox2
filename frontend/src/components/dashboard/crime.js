@@ -12,9 +12,9 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import {
-  Prison,
+  Lock,
   Shield,
-  Gun,
+  Crosshair,
   AlertTriangle,
   DollarSign,
   Pill,
@@ -87,7 +87,7 @@ export default function CrimePage({ snapshots }) {
           snapshots={snapshots}
           title="Prison Population"
           valueKey="crime.crime_metrics.population_incarcerated"
-          icon={Prison}
+          icon={Lock}
         />
         <MetricCard
           snapshots={snapshots}
@@ -99,7 +99,7 @@ export default function CrimePage({ snapshots }) {
           snapshots={snapshots}
           title="Gun Ownership"
           valueKey="crime.crime_metrics.gun_ownership_rate"
-          icon={Gun}
+          icon={Crosshair}
         />
         <MetricCard
           snapshots={snapshots}
