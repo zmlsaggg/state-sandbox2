@@ -1,5 +1,5 @@
 export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  process.env.NEXT_PUBLIC_API_URL || '';
 
 const TOKEN_KEY = 'state-sandbox-token';
 
@@ -64,7 +64,7 @@ class ApiClient {
   }
 
   async _get(endpoint, params) {
-    const url = new URL(`${API_URL}${endpoint}`);
+    const url = new URL(`${API_URL}${endpoint}`, window.location.origin);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined && value !== null) {

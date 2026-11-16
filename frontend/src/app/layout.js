@@ -1,17 +1,8 @@
 import { Toaster } from '@/components/ui/toaster';
 import { UserProvider } from '@/context/user-context';
-import { Geist_Mono, Inter } from 'next/font/google';
+import '@fontsource-variable/inter';
+import '@fontsource-variable/geist-mono';
 import './globals.css';
-
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
 
 export const metadata = {
   title: 'State Sandbox AI',
@@ -23,7 +14,8 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body className={`${inter.variable} ${geistMono.variable} antialiased`}>
+      <body className="antialiased"
+        style={{ '--font-inter': 'Inter Variable', '--font-geist-mono': 'Geist Mono Variable' }}>
         <UserProvider>
           {children}
           <Toaster />

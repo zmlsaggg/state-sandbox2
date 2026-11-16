@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, or_
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
 import traceback
 import asyncio
@@ -40,6 +40,7 @@ from model.parsing import parse_state
 from utils.event_stream import event_stream_response
 from config import (
     CACHE_TTL_STATES_LEADERBOARD,
+    TURN_LOCK_SECONDS,
     CREDITS_NEW_STATE_COST,
     CREDITS_NEXT_YEAR_COST,
 )
@@ -265,15 +266,29 @@ async def create_state_snapshot(
         if not previous_snapshots:
             raise HTTPException(status_code=404, detail="No previous snapshots found")
 
-        if state.turn_in_progress:
+        # Acquire atomically in PostgreSQL, recovering only expired locks.
+        # No always-on reset worker; active turns are never reset on cold starts.
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=TURN_LOCK_SECONDS)
+        acquired = (
+            db.query(State)
+            .filter(
+                State.id == state_id,
+                State.user_id == current_user.id,
+                or_(
+                    State.turn_in_progress.is_(False),
+                    State.updated_at < cutoff,
+                ),
+            )
+            .update({State.turn_in_progress: True, State.updated_at: func.now()},
+                    synchronize_session=False)
+        )
+        db.commit()
+        if not acquired:
             yield StateErrorEvent(
                 message="Turn already in progress, refresh and try again after a few minutes"
             ).json_line()
             return
-
-        state.turn_in_progress = True
-        db.add(state)
-        db.commit()
+        db.refresh(state)
 
         latest_snapshot = previous_snapshots[-1]
         current_date = datetime.strptime(latest_snapshot.date, "%Y-%m")
@@ -334,7 +349,15 @@ async def create_state_snapshot(
             current_user.credits -= CREDITS_NEXT_YEAR_COST
             db.add(current_user)
             db.commit()
+        except asyncio.CancelledError:
+            # Streaming disconnected or exceeded its request budget.
+            db.rollback()
+            state.turn_in_progress = False
+            db.add(state)
+            db.commit()
+            raise
         except Exception:
+            db.rollback()
             print(traceback.format_exc())
             state.turn_in_progress = False
             db.add(state)
