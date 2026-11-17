@@ -257,11 +257,11 @@ class AITests(unittest.IsolatedAsyncioTestCase):
             db.refresh(alice_state)
             db.refresh(bob_state)
 
-            markdown = '\\n'.join(
-                f'# {dimension.title}\\n## Overview\\nText\\n'
+            markdown = '\n'.join(
+                f'# {dimension.title}\n## Overview\nText\n'
                 for dimension in DIMENSIONS
             )
-            markdown += '\\n# Government\\n## Government Metadata\\n- Country Official Name: Alice Republic\\n'
+            markdown += '\n# Government\n## Government Metadata\n- Country Official Name: Alice Republic\n'
             db.add(StateSnapshot(
                 date='2022-01', state_id=alice_state.id,
                 markdown_state=markdown,
