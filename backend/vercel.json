@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "PYTHONPATH=. python scripts/init_ai_tables.py",
+  "buildCommand": "PYTHONPATH=. uv run --no-project --with-requirements requirements.txt --python 3.14 scripts/init_ai_tables.py",
   "functions": {
     "api/index.py": { "maxDuration": 300 }
   },
