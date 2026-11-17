@@ -5,6 +5,8 @@ from typing import Any, List, Tuple, Dict, Optional
 
 def extract_codeblock(text: str, fix_markdown: bool = True) -> str:
     match = re.search(r"```[a-zA-Z]+\n(.*?)```", text, re.DOTALL)
+    if not match:
+        raise ValueError("AI response did not contain the required fenced code block.")
     out = match.group(1).strip()
     if fix_markdown:
         # remove italic, bold, etc.
