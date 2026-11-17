@@ -1,7 +1,8 @@
-"""Run before rollout: PYTHONPATH=. python scripts/init_ai_tables.py"""
+"""Run before rollout using the backend's Vercel build environment."""
 from sqlalchemy import text
 from db.database import engine
 from db.models import AIBudget, AIResult
+
 
 def init_ai_tables():
     # Additive only. Existing game tables/credits/snapshots are untouched.
