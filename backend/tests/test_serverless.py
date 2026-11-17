@@ -47,7 +47,8 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.client.get('/api/auth/me', headers=headers).json()['username'], 'test-user')
         self.assertEqual(self.client.get('/api/states', headers=headers).json(), [])
         self.assertEqual(self.client.get('/api/states/latest').json(), [])
-        self.assertEqual(self.client.get('/api/states/999').status_code, 404)
+        # Exercise the missing-state response as an authenticated caller.
+        self.assertEqual(self.client.get('/api/states/999', headers=headers).status_code, 404)
         self.assertEqual(self.client.get('/api/auth/me', headers={
             'Authorization': 'Bearer invalid'
         }).status_code, 401)
