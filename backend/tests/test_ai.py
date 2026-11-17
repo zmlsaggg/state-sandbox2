@@ -16,7 +16,7 @@ from sqlalchemy.pool import StaticPool
 
 from main import app
 from db.database import Base, get_db
-from db.models import User, AIResult, AIBudget
+from db.models import User, AIResult, AIBudget, State, StateSnapshot
 from model.ai_session import AISession, current_ai, AIError
 from model.providers import OpenAIProvider
 from routers.ai import acquire, release
@@ -236,3 +236,78 @@ class AITests(unittest.IsolatedAsyncioTestCase):
         with patch('model.providers.AsyncOpenAI', FakeClient):
             self.assertEqual(await asyncio.gather(run('alice'), run('bob')), ['ok', 'ok'])
         self.assertCountEqual(calls, [('alice', 'alice-model'), ('bob', 'bob-model')])
+
+
+    def test_private_state_and_snapshot_reads_are_owner_scoped(self):
+        from model.state_config import DIMENSIONS
+
+        with self.sessions() as db:
+            alice_state = State(
+                name='Alice nation', date='2022-01', description='private',
+                flag_svg='<svg></svg>', user_id=1,
+                updated_at=datetime.now(timezone.utc),
+            )
+            bob_state = State(
+                name='Bob nation', date='2022-01', description='private',
+                flag_svg='<svg></svg>', user_id=2,
+                updated_at=datetime.now(timezone.utc),
+            )
+            db.add_all([alice_state, bob_state])
+            db.commit()
+            db.refresh(alice_state)
+            db.refresh(bob_state)
+
+            markdown = '\\n'.join(
+                f'# {dimension.title}\\n## Overview\\nText\\n'
+                for dimension in DIMENSIONS
+            )
+            markdown += '\\n# Government\\n## Government Metadata\\n- Country Official Name: Alice Republic\\n'
+            db.add(StateSnapshot(
+                date='2022-01', state_id=alice_state.id,
+                markdown_state=markdown,
+                markdown_future_events='No notable events',
+                markdown_future_events_policy='',
+            ))
+            db.commit()
+            alice_id, bob_id = alice_state.id, bob_state.id
+
+        self.assertEqual(
+            self.client.get(f'/api/states/{alice_id}', headers=self.headers).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get(f'/api/states/{bob_id}', headers=self.headers).status_code,
+            404,
+        )
+        self.assertEqual(
+            self.client.get(f'/api/states/{alice_id}/snapshots', headers=self.headers).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get(f'/api/states/{bob_id}/snapshots', headers=self.headers).status_code,
+            404,
+        )
+        self.assertIn(
+            self.client.get(f'/api/states/{alice_id}').status_code,
+            (401, 403),
+        )
+        self.assertIn(
+            self.client.get(f'/api/states/{alice_id}/snapshots').status_code,
+            (401, 403),
+        )
+
+    def test_setup_answers_are_limited_to_the_five_point_scale(self):
+        from pydantic import ValidationError
+        from routers.schemas import QuestionInput
+
+        self.assertEqual(QuestionInput(question='Test?', value=3).value, 3)
+        for invalid_value in (0, 6, -1, 10):
+            with self.subTest(value=invalid_value):
+                with self.assertRaises(ValidationError):
+                    QuestionInput(question='Test?', value=invalid_value)
+
+    def test_empty_event_distribution_has_a_safe_fallback(self):
+        from model.actions import _sample_event
+
+        self.assertEqual(_sample_event([]), 'No notable events')
+        self.assertEqual(_sample_event([(0.0, '  ')]), 'No notable events')
