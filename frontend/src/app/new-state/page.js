@@ -137,11 +137,6 @@ export default function NewState() {
               description:
                 event.message || 'Failed to create state. Please try again.',
             });
-            if (event?.message.includes('credits')) {
-              setTimeout(() => {
-                router.push('/account?buy=true');
-              }, 2000);
-            }
             break;
           case 'complete':
             refreshStates().then(() => {
@@ -155,11 +150,9 @@ export default function NewState() {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to create state. Please try again.',
+        description: error.message || 'Failed to create state. Please try again.',
       });
-      setTimeout(() => {
-        router.push('/account?buy=true');
-      }, 2000);
+      router.push('/account');
     } finally {
       setIsLoading(false);
     }

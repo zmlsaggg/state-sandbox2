@@ -54,3 +54,24 @@ class StateSnapshot(TimestampMixin, Base):
 
     # Relationship to State
     state = relationship("State", back_populates="snapshots")
+
+
+class AIResult(Base):
+    """Short-lived browser relay mailbox, never contains provider credentials."""
+    __tablename__ = "ai_results"
+    id = Column(String(36), primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    content = Column(String, nullable=True)
+    error = Column(Boolean, nullable=False, default=False)
+
+
+class AIBudget(Base):
+    __tablename__ = "ai_budgets"
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    # Epoch seconds keep conditional updates identical on Postgres and test SQLite.
+    window_start = Column(Integer, nullable=False, default=0)
+    count = Column(Integer, nullable=False, default=0)
+    last_started = Column(Integer, nullable=False, default=0)
+    active_until = Column(Integer, nullable=False, default=0)
+    owner = Column(String(36), nullable=True)

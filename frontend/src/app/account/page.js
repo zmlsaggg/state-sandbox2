@@ -5,23 +5,14 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import { useUser } from '@/context/user-context';
 import { useToast } from '@/hooks/use-toast';
 import { api } from '@/lib/api';
-import { PlusCircleIcon } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { AISettings } from '@/components/ai-settings';
 import { Suspense, useState } from 'react';
 
 function AccountContent() {
   const { user, refreshUser } = useUser();
-  const searchParams = useSearchParams();
-  const showBuyTooltip = searchParams.get('buy') === 'true';
   const [isEditingEmail, setIsEditingEmail] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const { toast } = useToast();
@@ -32,22 +23,6 @@ function AccountContent() {
   };
 
   if (!user) return null;
-
-  const handleBuyCredits = () => {
-    if (!user?.email || user?.email.startsWith('user')) {
-      if (
-        !confirm(
-          'It is strongly recommended to set an email address for account recovery before making purchases. Click OK to proceed anyway, or Cancel to update your email.'
-        )
-      ) {
-        return;
-      }
-    }
-    window.location.href = `${
-      process.env.NEXT_PUBLIC_STRIPE_LINK ||
-      'https://buy.stripe.com/cN23fLbJ7gWk4ww28c'
-    }?client_reference_id=statesandbox___ssuser_${user.id}`;
-  };
 
   const handleUpdateEmail = async () => {
     if (!newEmail.trim() || !isValidEmail(newEmail)) {
@@ -84,6 +59,7 @@ function AccountContent() {
         <h1 className="text-3xl font-bold">Account</h1>
       </div>
 
+      <AISettings />
       <Card>
         <CardHeader>
           <CardTitle>Profile</CardTitle>
@@ -143,38 +119,7 @@ function AccountContent() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Credits</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex items-center gap-4">
-            <div className="space-y-1">
-              <p className="text-sm font-medium leading-none">
-                Available Credits
-              </p>
-              <p className="text-2xl font-bold">{user?.credits || 0}</p>
-            </div>
-            <TooltipProvider>
-              <Tooltip open={showBuyTooltip}>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="secondary"
-                    size="default"
-                    onClick={handleBuyCredits}
-                  >
-                    <PlusCircleIcon className="h-4 w-4 mr-2" />
-                    Buy More Credits
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>You need credits to proceed.</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        </CardContent>
-      </Card>
+      <p className="text-sm text-muted-foreground">Legacy credits: {user.credits}. AI gameplay now uses your own provider; buying game credits is not required.</p>
     </div>
   );
 }

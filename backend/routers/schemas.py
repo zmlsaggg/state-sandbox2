@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Optional, List
 
@@ -44,13 +44,13 @@ class StateResponse(BaseModel):
 
 
 class QuestionInput(BaseModel):
-    question: str
+    question: str = Field(min_length=1, max_length=2000)
     value: int
 
 
 class CreateStateRequest(BaseModel):
-    name: str
-    questions: List[QuestionInput]
+    name: str = Field(min_length=1, max_length=120)
+    questions: List[QuestionInput] = Field(min_length=1, max_length=50)
 
 
 class StateSnapshotResponse(BaseModel):
@@ -65,12 +65,12 @@ class StateSnapshotResponse(BaseModel):
 
 
 class CreateNewSnapshotRequest(BaseModel):
-    policy: str
+    policy: str = Field(min_length=1, max_length=12000)
 
 
 class AdviceRequest(BaseModel):
-    question: str
-    events: str
+    question: str = Field(min_length=1, max_length=2000)
+    events: str = Field(max_length=24000)
 
 
 class AdviceResponse(BaseModel):

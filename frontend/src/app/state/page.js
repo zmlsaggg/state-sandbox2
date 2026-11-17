@@ -105,11 +105,6 @@ function StatePageContent({ stateId }) {
             description: event.message,
             duration: 10_000,
           });
-          if (event?.message.includes('credits')) {
-            setTimeout(() => {
-              router.push('/account?buy=true');
-            }, 2000);
-          }
           break;
         case 'state_snapshot_complete':
           setSnapshots((prevSnapshots) => [
@@ -131,6 +126,10 @@ function StatePageContent({ stateId }) {
           }
           break;
       }
+    }).catch(error => {
+      setTurnLoading(false);
+      setLoadingMessage('');
+      toast({ variant: 'destructive', title: 'AI action failed', description: error.message, duration: 10000 });
     });
   };
 
