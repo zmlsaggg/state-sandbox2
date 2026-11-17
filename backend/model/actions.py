@@ -207,15 +207,23 @@ The report failed to generate.
 
 
 def _sample_event(events: List[Tuple[float, str]]) -> str:
-    """Sample a single event based on probabilities."""
-    total = sum(prob for prob, _ in events)
-    r = random.random() * total
-    cumsum = 0
-    for prob, event in events:
-        cumsum += prob
-        if r <= cumsum:
+    """Sample an event safely, tolerating incomplete or malformed model output."""
+    if not events:
+        return "No notable events"
+
+    # Model-generated weights are untrusted text: ignore negative probabilities.
+    weighted_events = [(max(0.0, float(prob)), event) for prob, event in events]
+    total = sum(prob for prob, _ in weighted_events)
+    if total <= 0:
+        return next((event for _, event in weighted_events if event.strip()), "No notable events")
+
+    target = random.random() * total
+    cumulative = 0.0
+    for probability, event in weighted_events:
+        cumulative += probability
+        if target < cumulative:
             return event
-    return events[-1][1]  # Fallback to last event
+    return weighted_events[-1][1]
 
 
 async def generate_future_policy_suggestion(

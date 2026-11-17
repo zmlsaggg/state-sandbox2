@@ -112,9 +112,12 @@ async def get_latest_state_snapshots(
 @router.get("/{state_id}", response_model=StateResponse)
 async def get_state(
     state_id: int,
+    current_user: User = Depends(get_current_user_from_token),
     db: Session = Depends(get_db),
 ):
-    state = db.query(State).filter(State.id == state_id).first()
+    state = db.query(State).filter(
+        State.id == state_id, State.user_id == current_user.id
+    ).first()
     if not state:
         raise HTTPException(status_code=404, detail="State not found")
     return state
@@ -209,8 +212,16 @@ def _fix_snapshot_json(snapshot: StateSnapshot, only_keys: Optional[List[str]] =
 @router.get("/{state_id}/snapshots", response_model=List[StateSnapshotResponse])
 async def get_state_snapshots(
     state_id: int,
+    current_user: User = Depends(get_current_user_from_token),
     db: Session = Depends(get_db),
 ):
+    # These are private game saves, unlike the intentionally public leaderboard.
+    owned_state = db.query(State.id).filter(
+        State.id == state_id, State.user_id == current_user.id
+    ).first()
+    if not owned_state:
+        raise HTTPException(status_code=404, detail="State not found")
+
     snapshots = (
         db.query(StateSnapshot)
         .filter(StateSnapshot.state_id == state_id)
