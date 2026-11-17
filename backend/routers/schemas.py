@@ -45,7 +45,7 @@ class StateResponse(BaseModel):
 
 class QuestionInput(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
-    value: int
+    value: int = Field(ge=1, le=5)
 
 
 class CreateStateRequest(BaseModel):
