@@ -15,14 +15,6 @@ JWT_EXPIRATION_DAYS = _int_env(
     "JWT_EXPIRATION_DAYS", 10_000
 )  # We don't have a sign back in feature
 
-# OpenAI configuration
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-MODEL_HIGH_REASONING = os.getenv("MODEL_HIGH_REASONING", "o3-mini-2025-01-31")
-MODEL_MEDIUM_REASONING = os.getenv("MODEL_MEDIUM_REASONING", "o3-mini-2025-01-31")
-MODEL_LOW_REASONING = os.getenv(
-    "MODEL_LOW_REASONING", "gpt-4o"
-)  # model should support markdown
-
 # Cache configuration
 CACHE_TTL_STATES_LEADERBOARD = _int_env("CACHE_TTL_STATES_LEADERBOARD", 60 * 60 * 6)
 
@@ -31,8 +23,6 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "https://state.sshh.io")
 
 # Credits config
 CREDITS_DEFAULT = _int_env("CREDITS_DEFAULT", 10)
-CREDITS_NEW_STATE_COST = _int_env("CREDITS_NEW_STATE_COST", 1)
-CREDITS_NEXT_YEAR_COST = _int_env("CREDITS_NEXT_YEAR_COST", 1)
 
 # Stripe configuration
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")

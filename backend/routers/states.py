@@ -4,7 +4,6 @@ from sqlalchemy import func, and_, or_
 from typing import List, Optional
 from datetime import datetime, timedelta, timezone
 from dateutil.relativedelta import relativedelta
-import traceback
 import asyncio
 from fastapi_cache.decorator import cache
 
@@ -16,7 +15,6 @@ from routers.schemas import (
     StateSnapshotResponse,
     CreateNewSnapshotRequest,
     AdviceRequest,
-    AdviceResponse,
     StateCreatedEvent,
     StateStatusEvent,
     StateCompleteEvent,
@@ -36,13 +34,14 @@ from model.actions import (
     generate_state_description,
     generate_reasonable_policy_event,
 )
-from model.parsing import parse_state
+from model.parsing import parse_state, validate_generated_state
 from utils.event_stream import event_stream_response
+from routers.ai import ai_session
+from model.ai_session import AIError
+from utils.parallel import gather_cancel_on_error
 from config import (
     CACHE_TTL_STATES_LEADERBOARD,
     TURN_LOCK_SECONDS,
-    CREDITS_NEW_STATE_COST,
-    CREDITS_NEXT_YEAR_COST,
 )
 
 router = APIRouter(prefix="/api/states", tags=["states"])
@@ -121,19 +120,13 @@ async def get_state(
     return state
 
 
-@router.post("", response_model=None)
+@router.post("", response_model=None, dependencies=[Depends(ai_session)])
 async def create_state(
     request: CreateStateRequest,
     current_user: User = Depends(get_current_user_from_token),
     db: Session = Depends(get_db),
 ):
     async def event_stream():
-        if current_user.credits < CREDITS_NEW_STATE_COST:
-            yield StateErrorEvent(
-                message=f"Not enough credits ({current_user.credits} vs {CREDITS_NEW_STATE_COST}) to create a new state."
-            ).json_line()
-            return
-
         date = START_DATE
         start_date = datetime.strptime(date, "%Y-%m")
         end_date = start_date + relativedelta(months=12)
@@ -158,7 +151,7 @@ async def create_state(
         yield StateStatusEvent(
             message="Designing flag, events, and description..."
         ).json_line()
-        svg_flag, random_events_md, state_description = await asyncio.gather(
+        svg_flag, random_events_md, state_description = await gather_cancel_on_error(
             generate_state_flag(md_overview),
             generate_future_events(start_date, end_date, md_state, ""),
             generate_state_description(md_overview),
@@ -176,7 +169,7 @@ async def create_state(
             markdown_future_events=random_events_md,
             markdown_future_events_policy=policy_suggestion,
         )
-        parsed_state = parse_state(state_snapshot.markdown_state)
+        parsed_state = validate_generated_state(state_snapshot.markdown_state)
         full_name = parsed_state["government"]["government_metadata"][
             "country_official_name"
         ]["value"]
@@ -188,10 +181,6 @@ async def create_state(
         db.refresh(state)
 
         yield StateCompleteEvent(state=state).json_line()
-
-        current_user.credits -= CREDITS_NEW_STATE_COST
-        db.add(current_user)
-        db.commit()
 
     return event_stream_response(event_stream())
 
@@ -233,7 +222,7 @@ async def get_state_snapshots(
     return snapshots
 
 
-@router.post("/{state_id}/snapshots", response_model=None)
+@router.post("/{state_id}/snapshots", response_model=None, dependencies=[Depends(ai_session)])
 async def create_state_snapshot(
     state_id: int,
     request: CreateNewSnapshotRequest,
@@ -241,12 +230,6 @@ async def create_state_snapshot(
     db: Session = Depends(get_db),
 ):
     async def event_stream():
-        if current_user.credits < CREDITS_NEXT_YEAR_COST:
-            yield StateErrorEvent(
-                message=f"Not enough credits ({current_user.credits} vs {CREDITS_NEXT_YEAR_COST}) to create a new state."
-            ).json_line()
-            return
-
         state = (
             db.query(State)
             .filter(State.id == state_id, State.user_id == current_user.id)
@@ -318,10 +301,13 @@ async def create_state_snapshot(
                 historical_events=historical_events,
             )
 
+            # Do not persist incomplete output from a cheaper/unsupported model.
+            validate_generated_state(next_state)
+
             yield StateStatusEvent(
                 message="Generating report and events..."
             ).json_line()
-            next_state_report, next_events = await asyncio.gather(
+            next_state_report, next_events = await gather_cancel_on_error(
                 generate_diff_report(
                     start_date=current_date,
                     end_date=next_date,
@@ -346,9 +332,6 @@ async def create_state_snapshot(
                 events=next_events,
             )
 
-            current_user.credits -= CREDITS_NEXT_YEAR_COST
-            db.add(current_user)
-            db.commit()
         except asyncio.CancelledError:
             # Streaming disconnected or exceeded its request budget.
             db.rollback()
@@ -356,14 +339,13 @@ async def create_state_snapshot(
             db.add(state)
             db.commit()
             raise
-        except Exception:
+        except Exception as exc:
             db.rollback()
-            print(traceback.format_exc())
             state.turn_in_progress = False
             db.add(state)
             db.commit()
             yield StateErrorEvent(
-                message="Failed to simulate the changes. Try again. If issues persist, reduce policy actions."
+                message=str(exc) if isinstance(exc, AIError) else "Failed to simulate the changes. Try another model or retry."
             ).json_line()
             return
 
@@ -391,7 +373,7 @@ async def create_state_snapshot(
     return event_stream_response(event_stream())
 
 
-@router.post("/{state_id}/advice", response_model=AdviceResponse)
+@router.post("/{state_id}/advice", response_model=None, dependencies=[Depends(ai_session)])
 async def get_advice(
     state_id: int,
     request: AdviceRequest,
@@ -414,7 +396,11 @@ async def get_advice(
     )
     if not latest_snapshot:
         raise HTTPException(status_code=404, detail="State not found")
-    advice = await generate_state_advice(
-        latest_snapshot.markdown_state, request.question, request.events
-    )
-    return AdviceResponse(markdown_advice=advice)
+    async def advice_stream():
+        advice = await generate_state_advice(
+            latest_snapshot.markdown_state, request.question, request.events
+        )
+        import json
+        yield json.dumps({"type": "advice", "markdown_advice": advice}) + "\n"
+
+    return event_stream_response(advice_stream())

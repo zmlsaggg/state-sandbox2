@@ -11,7 +11,7 @@
 - 🌍 High dimensional game play (people, economy, media, crime, environment, etc).
 - 🎯 Make arbitrary policy decisions and see the impact.
 - 🌪️ Realistic randomized events and natural disasters.
-- 🧠 Powered by powerful o1 reasoning models.
+- 🧠 Player-funded AI through Puter or personal provider keys.
 - 🏆 Leaderboard for comparing your nation to others.
 
 ## Setup
@@ -44,13 +44,13 @@ to a new database or a replacement of the game's model logic.
 - Import the repository into Vercel with **Root Directory `backend`**.
 - Use **Other** framework preset; no frontend build command or output directory.
   `backend/vercel.json` routes `/api/*` to the Python ASGI function.
-- Set `DATABASE_URL`, a stable `JWT_SECRET_KEY`, `OPENAI_API_KEY`, and
+- Set `DATABASE_URL`, a stable `JWT_SECRET_KEY`, and
   `FRONTEND_URL`. See `backend/.env.example` for all settings.
 - Use PostgreSQL with TLS, preferably the provider's transaction pooler (for
   example Supabase port 6543). SQLAlchemy uses `NullPool` so warm instances do
   not each retain a large pool. No Supabase-specific SDK is required.
 - For an existing database, retain the URL and **the existing JWT secret** so
-  users keep their sessions. There is no schema change in this migration.
+  users keep their sessions. Before rollout, add the AI relay/rate-limit tables using the command below.
 - For a new database only, initialize tables once from a trusted environment:
   `cd backend && python -c 'from db import models; from db.database import init_db; init_db()'`.
   Do not create tables on each cold start. Export the environment variables first.
@@ -96,7 +96,7 @@ through your environment manager (they are not loaded automatically).
 ```bash
 python -m venv .venv
 .venv/bin/pip install -r backend/requirements.txt
-# Export DATABASE_URL, JWT_SECRET_KEY and OPENAI_API_KEY first.
+# Export DATABASE_URL and JWT_SECRET_KEY first.
 (cd backend && ../.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000)
 # In another terminal; /api proxies to the local Python process by default:
 cd frontend && npm ci && npm run dev -- --hostname 0.0.0.0
@@ -112,3 +112,136 @@ API_ORIGIN=https://YOUR-API.vercel.app npm run build --prefix frontend
 Frontend fonts are bundled from npm, so builds do not require Google Fonts
 network access. The lockfile pins Next.js 15.5.29; keep it updated with security
 patches rather than relying on a caret alone to update `npm ci` deployments.
+
+
+## Player-funded AI: Puter + personal keys
+
+The game no longer uses a shared `OPENAI_API_KEY` or owner-funded fallback.
+All generation paths (country creation, next year, advice, and their internal
+model calls) use a request-local player AI session. Game credits are no longer
+checked/deducted for those actions. Existing credit balances and historical
+Stripe webhook handling are retained for compatibility, but the purchase UI is
+removed. Review/disable old public payment links separately in your Stripe account.
+
+### Required rollout step
+
+After deploying code but **before accepting game traffic**, run against the
+existing database from a trusted environment with `DATABASE_URL` and
+`JWT_SECRET_KEY` exported:
+
+```bash
+PYTHONPATH=backend .venv/bin/python backend/scripts/init_ai_tables.py
+```
+
+This idempotently creates only `ai_budgets` and `ai_results`, leaving existing
+users/states/snapshots unchanged. On PostgreSQL it enables RLS with no public
+policies for these internal tables. The backend must connect as table owner or a
+trusted BYPASSRLS role. Do not expose database credentials to the browser. For a
+fresh DB, initialize the game tables as above first, then run this script too.
+No external database was modified by this code change.
+
+### Player setup (Account → Your AI provider)
+
+- **Puter:** explicitly connect your own Puter account, choose an available model,
+  then keep the game tab open during generation. `puter.ai.chat` runs in the
+  browser; neither the Puter token nor a developer Puter key is sent to Python.
+  The SDK is loaded only after clicking Enable Puter SDK on the account settings page, not globally on every page.
+- **Personal key:** choose OpenAI, Groq, or OpenRouter and enter your own key and
+  a model you can access. Keys are stored only in the current tab's JS memory,
+  not in app localStorage/sessionStorage, URLs, or the database. Reloading requires
+  entering the key again. Requests send `X-AI-Key` over HTTPS to the trusted game
+  API, which calls a fixed allowlisted provider URL. Arbitrary upstream URLs are
+  not accepted. No retry/fallback ever spends a developer key.
+- Model names are configurable, but capabilities and availability are not
+  guaranteed. Use long-context, strong Markdown/structured-output models; small
+  models may produce invalid states. Errors do not leak upstream response bodies
+  or credentials. Prompts/model output are no longer printed by game actions.
+- Puter and providers can require payment, enforce quotas, or change availability.
+  This is **not unlimited free AI**. You still pay any hosting/database charges.
+  Set spending caps at your provider; this app cannot guarantee provider prices.
+
+### Browser relay and trust boundaries
+
+Python still constructs prompts, orchestrates all game stages, parses model
+output, and commits snapshots. For Puter it emits `ai_request` NDJSON events.
+The browser runs `puter.ai.chat` and POSTs each result to
+`/api/ai/results/{request_id}` using the game login token. This callback must NOT
+be blocked by the one-active-action limiter: it completes the already admitted
+action. Multiple internal requests can run concurrently, bounded by
+`AI_MAX_PARALLEL_CALLS` (default 3). Responses are size-limited, owner-bound,
+expiring and single-use. Short-lived result mailboxes contain output only (not
+keys or prompts), are deleted on completion/cancellation, and stale mailboxes
+are cleaned on subsequent action admission after expiry. PostgreSQL rather than
+process-local memory supports callbacks landing on another serverless instance.
+
+**A browser is not a trusted model oracle.** A player can alter their own Puter
+result, even though they cannot answer another player's request. Existing parsing
+checks are not cryptographic model attestation; the public leaderboard must be
+considered casual/unverified, not a cheat-proof competitive ranking. AI flags are
+rendered as isolated SVG images rather than injecting untrusted SVG DOM into the
+page. Other game output continues through the existing Markdown/state parsers.
+
+The Puter SDK is third-party code with access to the page context; connecting it
+is an explicit trust decision. Do not configure infrastructure/APM to record
+`X-AI-Key`, authentication headers, or request bodies. The app itself does not
+persist personal keys, but infrastructure log redaction remains your responsibility.
+
+Puter's vendor-compatible endpoint is deliberately NOT used with a browser token:
+[current upstream controller](https://github.com/HeyPuter/puter/blob/main/src/backend/controllers/puterai/PuterAIController.ts)
+requires a delegated API token and paid subscription there; browser accounts use
+[the JS chat implementation](https://github.com/HeyPuter/puter/blob/main/src/puter-js/src/modules/ai/chat.js).
+
+### Gameplay-friendly distributed rate limits
+
+Defaults, configured on the API project (see `backend/.env.example`):
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `AI_RATE_ACTIONS` | 12 | Starts per account per fixed window |
+| `AI_RATE_WINDOW_SECONDS` | 600 | Ten-minute window |
+| `AI_COOLDOWN_SECONDS` | 8 | Minimum interval between starts |
+| `AI_ACTION_LEASE_SECONDS` | 330 | One-active-action lease; must exceed platform hard timeout |
+| `AI_MAX_PARALLEL_CALLS` | 3 | Internal model-call concurrency within one action |
+
+A whole turn counts as **one** action, not one per AI request. Failed admitted
+attempts count too, preventing invalid-key/error spam. Rejections are HTTP 429
+with `Retry-After`, surfaced in the UI. The database performs conditional atomic
+updates; normal completion releases the active lease, cooldown/window counts
+remain, and abrupt termination is recoverable after lease expiry. Keep
+`STREAM_TIMEOUT_SECONDS` below the platform timeout and the lease above it.
+Callbacks are not charged a second action. Account farming/distributed bots are
+not stopped by a per-account limiter; add signup CAPTCHA, edge/IP abuse controls,
+and infrastructure budgets before a public launch. No free-hosting guarantee.
+
+The advice endpoint now uses the same streaming transport as other AI actions;
+the included client still returns `{ markdown_advice }` to the existing advisor UI.
+Custom API consumers must handle NDJSON events and Puter callbacks too.
+
+### Offline validation
+
+```bash
+PYTHONPATH=backend .venv/bin/python -m unittest discover -s backend/tests -v
+npm test --prefix frontend
+API_ORIGIN=https://YOUR-API.vercel.app npm run build --prefix frontend
+```
+
+Tests mock model calls. Real Puter login/popups, paid providers, production
+PostgreSQL concurrency and Vercel streaming must also be smoke-tested after deployment;
+no live model call or deployment is implied by the offline suite.
+
+Puter requests already started in the browser may continue at the provider after
+a tab closes or the server action is cancelled. The app stops accepting results
+and cleans its server tasks, but cannot guarantee cancellation/refunds of the
+third-party SDK request. Do not treat a game timeout as a provider spending cap.
+
+New generated states are checked for all game dimensions and the country name
+before saving; this rejects obviously incomplete output, but is not a full schema
+or semantic validator for every metric. Strong structured-output models are still
+recommended. Existing saved data is not rewritten or revalidated by the rollout.
+
+The Account page reads effective limits, remaining starts, and active-action
+status from authenticated `GET /api/ai/status` (non-cached, read-only). Use
+"Refresh current limits" for a new snapshot; viewing the status never consumes
+an action. Invalid limiter configuration fails at startup rather than silently
+allowing a short lease or disabling limits. Puter SDK loading times out after
+15 seconds and can be retried without reloading the page.

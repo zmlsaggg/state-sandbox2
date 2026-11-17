@@ -1,6 +1,8 @@
 """Request-scoped streaming: no work survives the HTTP invocation."""
 import asyncio
 import os
+import json
+from model.ai_session import current_ai, AIError
 from typing import AsyncGenerator
 
 from fastapi.responses import StreamingResponse
@@ -16,6 +18,10 @@ async def with_heartbeat(stream: AsyncGenerator[str, None]) -> AsyncGenerator[st
     try:
         task = asyncio.create_task(stream.__anext__())
         while True:
+            session = current_ai.get(None)
+            if session:
+                while not session.events.empty():
+                    yield json.dumps(session.events.get_nowait()) + '\n'
             remaining = deadline - asyncio.get_running_loop().time()
             if remaining <= 0:
                 yield StateErrorEvent(message="Generation timed out. Please try again.").json_line()
@@ -27,6 +33,12 @@ async def with_heartbeat(stream: AsyncGenerator[str, None]) -> AsyncGenerator[st
             try:
                 item = task.result()
             except StopAsyncIteration:
+                return
+            except AIError as exc:
+                yield StateErrorEvent(message=str(exc)).json_line()
+                return
+            except Exception:
+                yield StateErrorEvent(message="Generation failed. Try another model or retry.").json_line()
                 return
             yield item
             task = asyncio.create_task(stream.__anext__())

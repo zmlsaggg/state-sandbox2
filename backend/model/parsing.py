@@ -347,3 +347,22 @@ def _normalize_percentages(items: list[str]) -> list[str]:
         normalized_items.append(f"- {label}: {value_str}")
 
     return normalized_items
+
+
+def validate_generated_state(markdown: str) -> dict:
+    """Reject obviously incomplete model output before replacing a saved turn."""
+    from model.state_config import DIMENSIONS
+    from model.ai_session import AIError
+
+    try:
+        parsed = parse_state(markdown)
+        for dimension in DIMENSIONS:
+            section = parsed[_clean_key(dimension.title)]
+            if not isinstance(section, dict) or not section:
+                raise ValueError('Missing dimension')
+        name = parsed['government']['government_metadata']['country_official_name']['value']
+        if not isinstance(name, str) or not name.strip():
+            raise ValueError('Missing country name')
+        return parsed
+    except Exception:
+        raise AIError('The selected model returned an incomplete game state. Try a stronger model.') from None

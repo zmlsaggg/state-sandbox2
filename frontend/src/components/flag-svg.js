@@ -1,4 +1,3 @@
-import { ReactSVG } from 'react-svg';
 import {
   Dialog,
   DialogContent,
@@ -34,24 +33,15 @@ export function FlagSVG({
     return null;
   }
 
-  const svgBlob = new Blob([modifiedSvgString], { type: 'image/svg+xml' });
-  const url = URL.createObjectURL(svgBlob);
-
+  // Treat AI/browser-provided SVG as an isolated image, NEVER injected DOM.
+  // Image-context SVG cannot execute event handlers/scripts in the game origin.
+  const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(modifiedSvgString)}`;
   const SvgComponent = (
-    <ReactSVG
+    <img
       src={url}
-      wrapper="span"
+      alt="Nation flag"
       className={className}
-      onLoad={() => URL.revokeObjectURL(url)}
-      beforeInjection={(svg) => {
-        svg.removeAttribute('width');
-        svg.removeAttribute('height');
-        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-        svg.style.height = size;
-        svg.style.width = 'auto';
-        svg.style.display = 'inline-block';
-        svg.style.verticalAlign = 'middle';
-      }}
+      style={{ height: size, width: 'auto', display: 'inline-block', verticalAlign: 'middle' }}
     />
   );
 
@@ -66,22 +56,11 @@ export function FlagSVG({
       </DialogTrigger>
       <DialogContent className="max-w-[90vw] max-h-[90vh]">
         <DialogTitle className="mb-4">Flag</DialogTitle>
-        <ReactSVG
+        <img
           src={url}
-          wrapper="span"
-          className="w-full h-full"
-          onLoad={() => URL.revokeObjectURL(url)}
-          beforeInjection={(svg) => {
-            svg.removeAttribute('width');
-            svg.removeAttribute('height');
-            svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
-            svg.style.maxWidth = '100%';
-            svg.style.width = 'auto';
-            svg.style.maxHeight = '80vh';
-            svg.style.height = 'auto';
-            svg.style.display = 'block';
-            svg.style.margin = 'auto';
-          }}
+          alt="Expanded nation flag"
+          className="mx-auto block h-auto w-auto max-w-full"
+          style={{ maxHeight: '80vh' }}
         />
       </DialogContent>
     </Dialog>

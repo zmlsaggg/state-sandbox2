@@ -1,7 +1,7 @@
 from typing import List, Tuple
 from datetime import datetime
 import random
-import asyncio
+from utils.parallel import gather_cancel_on_error
 import re
 
 from model.providers import OpenAIProvider
@@ -64,9 +64,6 @@ Reply with:
 - You must make the width = 900 and height = 600
 """.strip()
     output = await provider.generate_medium_reasoning(prompt)
-    print("--- flag output ---")
-    print(output)
-    print("--- ---")
     return extract_codeblock(output)
 
 
@@ -162,11 +159,8 @@ Reply with (plain text):
 - Include balanced strengths and flaws and what makes them unique in the world.
 """.strip()
     overview_output = await provider.generate_high_reasoning(prompt)
-    print("--- overview output ---")
-    print(overview_output)
-    print("--- ---")
 
-    dimension_outputs = await asyncio.gather(
+    dimension_outputs = await gather_cancel_on_error(
         *[
             _generate_state_dimension(date, overview_output, dimension)
             for dimension in DIMENSIONS
@@ -293,9 +287,6 @@ Reply with:
 2. <format> as a markdown codeblock. Be sure to include "No notable events" as the first event in each category.
 """.strip()
     raw_output = await provider.generate_medium_reasoning(prompt)
-    print("--- future events output ---")
-    print(raw_output)
-    print("--- ---")
     output = extract_codeblock(raw_output)
 
     # Parse the output into categories and their events
@@ -361,9 +352,6 @@ Reply with:
 - For policies (if any), lean towards adding a policy and only remove a policy if it's no longer relevant.
 """.strip()
     raw_output = await provider.generate_medium_reasoning(new_state_dimension_prompt)
-    print(f"--- diff {dimension.title} ---")
-    print(raw_output)
-    print("--- ---")
     md_new_state_dimension = extract_codeblock(raw_output)
     return f"# {dimension.title}\n{md_new_state_dimension}"
 
@@ -414,7 +402,6 @@ Rephrase <user-action> into a valid policy event and reply with their action for
     try:
         output = extract_codeblock(raw_output).replace('"', "")
     except Exception as e:
-        print("Error parsing output", e)
         return "Government Events: None"
     if not output.startswith("Government Events:"):
         return "Government Events: None"
@@ -442,13 +429,6 @@ async def generate_next_state(
 
     events_str = f"{reasonable_policy}\n{events}"
     events_str = "\n".join(["- " + event for event in events_str.split("\n")])
-    print("--- prev state ---")
-    print(prev_state)
-    print("--- historical events ---")
-    print(historical_events_str)
-    print("--- latest events ---")
-    print(events_str)
-    print("--- ---")
 
     dimensions_str = ", ".join([d.title for d in DIMENSIONS])
     diff_prompt = f"""
@@ -501,11 +481,8 @@ Reply with (in plain text):
 - Include relative changes to GDP, growth rates, population, and other metrics.
 """.strip()
     diff_output = await provider.generate_high_reasoning(diff_prompt)
-    print("---")
-    print(diff_output)
-    print("---")
 
-    dimension_outputs = await asyncio.gather(
+    dimension_outputs = await gather_cancel_on_error(
         *[
             _generate_next_state_dimension(
                 start_date, end_date, prev_state, dimension, diff_output
