@@ -1,4 +1,4 @@
-"""Run once before rollout: PYTHONPATH=backend python backend/scripts/init_ai_tables.py"""
+"""Run before rollout: PYTHONPATH=. python scripts/init_ai_tables.py"""
 from sqlalchemy import text
 from db.database import engine
 from db.models import AIBudget, AIResult
