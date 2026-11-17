@@ -44,6 +44,13 @@ to a new database or a replacement of the game's model logic.
 - Import the repository into Vercel with **Root Directory `backend`**.
 - Use **Other** framework preset; no frontend build command or output directory.
   `backend/vercel.json` routes `/api/*` to the Python ASGI function.
+
+- Python is pinned by `backend/.python-version` to **3.12**. That file is at the
+  root of the API project's configured directory. If Vercel build logs still show
+  3.14, verify the API project's Root Directory is exactly `backend`, confirm the
+  deployment commit contains this file, and redeploy with the build cache cleared.
+  Do not solve a root-directory/configuration mismatch by changing application
+  dependencies unnecessarily.
 - Set `DATABASE_URL`, a stable `JWT_SECRET_KEY`, and
   `FRONTEND_URL`. See `backend/.env.example` for all settings.
 - Use PostgreSQL with TLS, preferably the provider's transaction pooler (for
