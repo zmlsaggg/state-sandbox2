@@ -3,7 +3,7 @@ from sqlalchemy import text
 from db.database import engine
 from db.models import AIBudget, AIResult
 
-if __name__ == '__main__':
+def init_ai_tables():
     # Additive only. Existing game tables/credits/snapshots are untouched.
     AIBudget.__table__.create(engine, checkfirst=True)
     AIResult.__table__.create(engine, checkfirst=True)
@@ -13,3 +13,7 @@ if __name__ == '__main__':
         with engine.begin() as connection:
             connection.execute(text('ALTER TABLE ai_budgets ENABLE ROW LEVEL SECURITY'))
             connection.execute(text('ALTER TABLE ai_results ENABLE ROW LEVEL SECURITY'))
+
+
+if __name__ == '__main__':
+    init_ai_tables()

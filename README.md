@@ -245,3 +245,9 @@ status from authenticated `GET /api/ai/status` (non-cached, read-only). Use
 an action. Invalid limiter configuration fails at startup rather than silently
 allowing a short lease or disabling limits. Puter SDK loading times out after
 15 seconds and can be retried without reloading the page.
+
+The existing main-branch auto-initialization change is preserved as an opt-in:
+`INIT_DB_ON_STARTUP=true` creates missing game tables plus the AI tables/RLS at
+import for a first deployment. It requires owner-level DDL privileges and should
+be set back to `false` immediately afterwards. Prefer running the explicit
+migration once; the default avoids schema DDL on every serverless cold start.

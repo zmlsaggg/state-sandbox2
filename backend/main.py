@@ -7,6 +7,15 @@ from fastapi_cache.backends.inmemory import InMemoryBackend
 
 from routers import auth, states, stripe, ai
 
+# Optional first-deployment bootstrap; avoid schema DDL on every cold start.
+# Production deployments should run the documented migration command once.
+if os.getenv("INIT_DB_ON_STARTUP", "false").lower() == "true":
+    from db.database import init_db
+    from scripts.init_ai_tables import init_ai_tables
+
+    init_db()
+    init_ai_tables()
+
 # ASGI serverless runtimes need not run lifespan hooks. Cache is only an
 # optimization local to this instance; no correctness depends on its contents.
 FastAPICache.init(InMemoryBackend(), prefix="fastapi-cache")
